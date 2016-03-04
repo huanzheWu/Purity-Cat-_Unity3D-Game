@@ -1,38 +1,67 @@
-﻿using UnityEngine;
-using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
+using UnityEngine;
 
-//该脚本用于控制背景图的循环
-//时间：7/21
+//多层背景图循环算法
+//使用方法：将该脚本搭载在游戏物体OBJ上（可以是一个空物体）
+//所有需要循环的背景图片，按顺序添加为OBJ的子物体
+//本脚本自动为子物体创建链表，并执行图片循环
+//speed用于设置循环的速度
+//direction用于设置图片移动的方向
+//2015.07
 
-public class BG_Roller : MonoBehaviour {
-
-      private Transform [] bgSprites= new Transform[2];              //获取两张相连的背景图片
-      private const float switchDistanceCam = 10.07f - (-0.41f);        //摄像机移动的切换图片距离，每移动这个距离则切换图片
-      private const float switchDistanceSpr = 9.59f*2;    //图片每次右移时应该移动的距离。
-      private Transform camTransform;                                //获取摄像机的Transform
-      private float camSourcePosition;                               //摄像机的初始位置（或者刚移动完图片那个时刻的摄像机位置）
-      private int signOfSprite;                                      //标记接下来要移动那张图片
-      void Start()
-      {
-          camTransform = this.transform;
-          camSourcePosition = camTransform.position.x;
-          signOfSprite = 0;
-          bgSprites[0] = GameObject.Find("backGround1").transform;
-          bgSprites[1] = GameObject.Find("backGround2").transform;   
-      }
-      void FixedUpdate()
-      {
-          float camCurrenPosition = camTransform.position.x;                 //获取摄像机当前位置的x变量
-          if (camCurrenPosition - camSourcePosition > switchDistanceCam)     //若移动了切换距离的倍数
-          {
-              camSourcePosition = camCurrenPosition;
-              //进行图片的切换
-              if (signOfSprite % 2 == 0) //将图片1移动
-                  bgSprites[0].transform.position = new Vector3(bgSprites[0].position.x + switchDistanceSpr, bgSprites[0].position.y, bgSprites[0].position.z);
-              else    //将图片二移动
-                  bgSprites[1].transform.position = new Vector3(bgSprites[1].position.x + switchDistanceSpr, bgSprites[1].position.y, bgSprites[1].position.z);
-              signOfSprite++;
-          }
-      }
+public class background_loop : MonoBehaviour
+{
+    public Vector2 speed = new Vector2(0 , 0);  	//图片的移动速度
+    public Vector2 direction = new Vector2(-1, 0);	//图片的移动方向（-1向左运动，相对摄像机来说，其内容向右运动）
+    public bool isLinkedToCamera = true;			//图片是否与摄像机关联
+    public bool isLooping = true;					//循环播放？
+	
+    private List<Transform> backgroundPart;			//存放背景图的链表
+	
+    void Start()
+    {
+        if (isLooping)	
+        {
+            backgroundPart = new List<Transform>();
+            for (int i = 0; i < transform.childCount; i++) 	//获取子物体，将其加入链表中
+            {
+                Transform child = transform.GetChild(i);
+                if (child.GetComponent<Renderer>() != null)
+                {
+                    backgroundPart.Add(child);
+                }
+            }
+            backgroundPart = backgroundPart.OrderBy(t => t.position.x).ToList();  //依据图片的相对位置进行排序
+        }
+    }
+    void FixedUpdate()	//游戏循环
+    {
+        Vector3 movement = new Vector3(  //计算移动速度向量
+         speed.x * direction.x,
+        speed.y * direction.y,
+          0);
+        movement *= Time.deltaTime;    
+        transform.Translate(movement); //以独立的速度进行移动
+        if (isLooping)
+        {
+            Transform firstChild = backgroundPart.FirstOrDefault();
+            if (firstChild != null)
+            {
+                if (firstChild.position.x < Camera.main.transform.position.x)  
+                {
+                    if (firstChild.GetComponent<Renderer>().IsVisibleFrom(Camera.main) == false) 
+						//判断是否在摄像机的可视范围之内，如果已经超出可视范围，则将图片连接到最右端
+                    {
+                        Transform lastChild = backgroundPart.LastOrDefault();
+                        Vector3 lastPosition = lastChild.transform.position;
+                        Vector3 lastSize = (lastChild.GetComponent<Renderer>().bounds.max - lastChild.GetComponent<Renderer>().bounds.min);
+                        firstChild.position = new Vector3(lastPosition.x + lastSize.x, firstChild.position.y, firstChild.position.z);
+                        backgroundPart.Remove(firstChild);//删除原来位置的图片
+                        backgroundPart.Add(firstChild); 	//在后面添加新的图片
+                    }
+                }
+            }
+        }
+    }
 }
-
